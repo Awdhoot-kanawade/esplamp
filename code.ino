@@ -146,7 +146,9 @@ void loop() {
   String currentTime = formatTime(now.hour(), now.minute());
   
   // Display the current time on TM1637 display
-  display.showNumberDecEx(now.hour() * 100 + now.minute(), 0x80, true);  // Display in HH:MM format with colon
+  // Display the time in HH:MM format with colon
+  int hour = convert_12();
+  display.showNumberDecEx(hour * 100 + now.minute(), 0b01000000, true);// Display in HH:MM format with colon
   
   // Check for button presses
   if (digitalRead(ALARM_OFF_PIN) == LOW) {
@@ -164,6 +166,23 @@ void loop() {
   checkAlarms(currentTime, currentDay);
 }
 
+int convert_12()
+{ 
+  DateTime now = rtc.now();
+  int hour = now.hour();
+  bool isPM = false;
+  
+  if (hour >= 12) {
+    isPM = true;  // PM time
+    if (hour > 12) {
+      hour -= 12;  // Convert 13-23 hours to 1-11 PM
+    }
+  } else if (hour == 0) {
+    hour = 12;  // Midnight is 12 AM in 12-hour format
+  }
+
+  return hour;
+}
 // Increase volume function (physical button)
 void increaseVolume() {
   currentVolume = min(currentVolume + 1, 30);  // DFPlayer supports volume levels from 0 to 30
