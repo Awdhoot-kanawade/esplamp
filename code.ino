@@ -6,9 +6,9 @@
 #include <Preferences.h>
 #include <NTPClient.h>
 #include <WiFiUdp.h>
-#include <DFRobotDFPlayerMini.h>
+#include <DFPlayerMini_Fast.h>
 #include <TM1637Display.h>  // TM1637 display library
-#include "SoftwareSerial.h"
+
 
 // Pin definitions for TM1637
 #define CLK_PIN 18     // Clock pin (DIO)
@@ -23,12 +23,10 @@ TM1637Display display(CLK_PIN, DIO_PIN);
 // Pin definitions for NeoPixel and Bluetooth
 #define LED_PIN 5
 #define BLUETOOTH_PIN 16  // GPIO for Bluetooth module control
-static const uint8_t PIN_MP3_TX = 26; // Connects to module's RX 
-static const uint8_t PIN_MP3_RX = 27; // Connects to module's TX 
-SoftwareSerial softwareSerial(PIN_MP3_RX, PIN_MP3_TX);
+
 
 // NeoPixel setup
-#define NUM_PIXELS 30
+#define NUM_PIXELS 78
 Adafruit_NeoPixel strip(NUM_PIXELS, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 // RTC setup
@@ -45,7 +43,8 @@ WebServer server;
 Preferences preferences;
 
 // DFPlayer for alarm sound playback
-DFRobotDFPlayerMini dfPlayer;
+#define FPSerial Serial1
+DFPlayerMini_Fast dfPlayer;
 
 // Variables
 String wakeUpTime = "06:30";
@@ -54,8 +53,8 @@ bool wakeUpAlarmEnabled = true;
 bool bedTimeAlarmEnabled = true;
 int currentVolume = 10;
 int currentBrightness = 255;
-int sunriseDuration = 30; // in minutes
-int sunsetDuration = 30;  // in minutes
+int sunriseDuration = 10; // in minutes
+int sunsetDuration = 10;  // in minutes
 int ledColor = 0xFFFFFF;  // Default color (white)
 String ledEffect = "solid";  // Default LED effect (solid)
 
@@ -101,12 +100,13 @@ void setup() {
 
   // Set up DFPlayer Mini for SD card playback (serial communication)
  
-  softwareSerial.begin(9600);
-  if (!dfPlayer.begin(softwareSerial)) {  // Start communication with DFPlayer
-    Serial.println("DFPlayer Mini not found!");
-    while (1);
+  FPSerial.begin(9600, SERIAL_8N1, 16, 17); // Start serial communication for ESP32 with 9600 baud rate, 8 data bits, no parity, and 1 stop bit
+  if (!dfPlayer.begin(FPSerial)) { // Initialize the DFPlayer Mini with the defined serial interface
+    Serial.println(F("Unable to begin:")); // If initialization fails, print an error message
+    while(1); 
   }
-  dfPlayer.volume(currentVolume);  // Set initial volume for DFPlayer
+  //dfPlayer.volume(currentVolume);  // Set initial volume for DFPlayer
+   dfPlayer.volume(30);
 
   // Initialize GPIO for controlling Bluetooth module
   pinMode(BLUETOOTH_PIN, OUTPUT);
@@ -141,14 +141,15 @@ void loop() {
   server.handleClient();
   timeClient.update();
   
+  
   // Check current time from RTC
   DateTime now = rtc.now();
   String currentTime = formatTime(now.hour(), now.minute());
   
   // Display the current time on TM1637 display
   // Display the time in HH:MM format with colon
-  int hour = convert_12();
-  display.showNumberDecEx(hour * 100 + now.minute(), 0b01000000, true);// Display in HH:MM format with colon
+  show_time();
+  
   
   // Check for button presses
   if (digitalRead(ALARM_OFF_PIN) == LOW) {
@@ -166,11 +167,13 @@ void loop() {
   checkAlarms(currentTime, currentDay);
 }
 
-int convert_12()
+void show_time()
 { 
   DateTime now = rtc.now();
   int hour = now.hour();
   bool isPM = false;
+  
+  
   
   if (hour >= 12) {
     isPM = true;  // PM time
@@ -181,7 +184,7 @@ int convert_12()
     hour = 12;  // Midnight is 12 AM in 12-hour format
   }
 
-  return hour;
+  display.showNumberDecEx(hour * 100 + now.minute(), 0b01000000, true);// Display in HH:MM format with colon
 }
 // Increase volume function (physical button)
 void increaseVolume() {
@@ -406,7 +409,7 @@ void handleUpdate() {
     bluetoothEnabled = (server.arg("bluetoothEnabled") == "true");
     digitalWrite(BLUETOOTH_PIN, bluetoothEnabled ? HIGH : LOW);  // Toggle Bluetooth module
     Serial.println("Bluetooth Module " + String(bluetoothEnabled ? "Enabled" : "Disabled"));
-    dfPlayer.play(1);
+    //dfPlayer.play(1);
     startSunrise();
     
   }
@@ -454,32 +457,16 @@ void setBrightness(int brightness) {
 void checkAlarms(String currentTime, int currentDay) {
   if (wakeUpAlarmEnabled && alarmDays[currentDay] && currentTime == wakeUpTime) {
     Serial.println("Wake-Up Alarm triggered!");
-    
-    // Store Bluetooth state and turn it off if it's on
-    bluetoothPreviousState = bluetoothEnabled;
-    if (bluetoothEnabled) {
-      digitalWrite(BLUETOOTH_PIN, LOW);  // Turn off Bluetooth module during the alarm
-      bluetoothEnabled = false;
-      Serial.println("Bluetooth turned off during the alarm");
-    }
-    
     startSunrise();
-    dfPlayer.play(1);  // Play track 1 from SD card (change track number as needed)
+     
   }
   if (bedTimeAlarmEnabled && alarmDays[currentDay] && currentTime == bedTime) {
     Serial.println("Bedtime Alarm triggered!");
-    
-    // Store Bluetooth state and turn it off if it's on
-    bluetoothPreviousState = bluetoothEnabled;
-    if (bluetoothEnabled) {
-      digitalWrite(BLUETOOTH_PIN, LOW);  // Turn off Bluetooth module during the alarm
-      bluetoothEnabled = false;
-      Serial.println("Bluetooth turned off during the alarm");
-    }
-    
     startSunset();
-    dfPlayer.play(2);  // Play track 2 from SD card (change track number as needed)
+    
   }
+
+    
 }
 
 // Helper function to format time for comparison
@@ -491,20 +478,35 @@ String formatTime(int hour, int minute) {
 
 // Simulate sunrise effect with increasing brightness
 void startSunrise() {
-  for (int i = 0; i < 100; i++) {
+  Serial.println("Good Morning....");
+  dfPlayer.play(1); 
+  for (int i = 0; i < 5; i++) {
     int brightness = map(i, 0, 100, 0, currentBrightness);
     setBrightness(brightness);
-    delay(sunriseDuration * 600);  // Convert minutes to milliseconds
+    delay(sunriseDuration * 600);  // Convert minutes to milliseconds   
+    show_time(); 
   }
   Serial.println("Sunrise simulation completed");
+  
+  strip.clear();
+  strip.show();
+  dfPlayer.stop();
+  
+
 }
 
 // Simulate sunset effect with decreasing brightness
 void startSunset() {
-  for (int i = 100; i > 0; i--) {
+  dfPlayer.play(2); 
+  for (int i = 10; i > 0; i--) {
     int brightness = map(i, 0, 100, 0, currentBrightness);
     setBrightness(brightness);
     delay(sunsetDuration * 600);  // Convert minutes to milliseconds
+    show_time();
   }
   Serial.println("Sunset simulation completed");
+  strip.clear();
+  strip.show();
+  dfPlayer.stop();
+  
 }
