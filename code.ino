@@ -353,6 +353,7 @@ void handleRoot() {
 }
 
 // Handle updates from sliders, checkboxes, and Bluetooth toggle
+// Handle updates from sliders, checkboxes, and Bluetooth toggle
 void handleUpdate() {
   if (server.hasArg("wakeUpTime")) {
     wakeUpTime = server.arg("wakeUpTime");
@@ -374,7 +375,7 @@ void handleUpdate() {
     preferences.putBool("bedTimeAlarmEnabled", bedTimeAlarmEnabled);
     Serial.println("Bedtime Alarm Enabled: " + String(bedTimeAlarmEnabled));
   }
-  
+
   // Update alarm days and store the boolean values in preferences using c_str()
   for (int i = 0; i < 7; i++) {
     String arg = "alarmDay" + String(i);
@@ -395,27 +396,37 @@ void handleUpdate() {
     setBrightness(currentBrightness);
     preferences.putInt("brightness", currentBrightness);
   }
+
+  // Immediately apply the selected color to the LED strip
   if (server.hasArg("ledColor")) {
     ledColor = strtoul(server.arg("ledColor").substring(1).c_str(), NULL, 16);  // Convert hex color to int
-    Serial.println("LED Color set to: #" + server.arg("ledColor"));
+    Serial.println("LED Color set to: " + server.arg("ledColor"));
+    applyColorToLEDs(ledColor);  // Apply the selected color to the LED strip
   }
+
   if (server.hasArg("ledEffect")) {
     ledEffect = server.arg("ledEffect");
     Serial.println("LED Effect set to: " + ledEffect);
   }
-  
+
   // Bluetooth module control
   if (server.hasArg("bluetoothEnabled")) {
     bluetoothEnabled = (server.arg("bluetoothEnabled") == "true");
     digitalWrite(BLUETOOTH_PIN, bluetoothEnabled ? HIGH : LOW);  // Toggle Bluetooth module
     Serial.println("Bluetooth Module " + String(bluetoothEnabled ? "Enabled" : "Disabled"));
-    //dfPlayer.play(1);
-    startSunrise();
-    
   }
 
   server.send(200, "text/plain", "Updated");
 }
+
+// Function to apply the selected color to the LED strip immediately
+void applyColorToLEDs(int color) {
+  for (int i = 0; i < strip.numPixels(); i++) {
+    strip.setPixelColor(i, color);  // Set each pixel to the selected color
+  }
+  strip.show();  // Refresh the LED strip to display the new color
+}
+
 
 // Handle commands such as stop alarm and sync RTC
 void handleCommand() {
@@ -446,11 +457,22 @@ void stopAlarm() {
 
 // Set brightness for the LED strip
 void setBrightness(int brightness) {
+  // Extract the red, green, and blue components from the color
+  int red = (ledColor >> 16) & 0xFF;   // Get red component
+  int green = (ledColor >> 8) & 0xFF;  // Get green component
+  int blue = ledColor & 0xFF;          // Get blue component
+
+  // Scale each color component based on the brightness level
+  red = (red * brightness) / 255;
+  green = (green * brightness) / 255;
+  blue = (blue * brightness) / 255;
+
+  // Apply the adjusted color to each pixel in the LED strip
   for (int i = 0; i < strip.numPixels(); i++) {
-    strip.setPixelColor(i, strip.Color(brightness, brightness, brightness));  // Set all pixels to white
+    strip.setPixelColor(i, strip.Color(red, green, blue));  // Set pixel with new brightness
   }
-  strip.show();
-  Serial.println("Brightness set to: " + String(brightness));
+  strip.show();  // Refresh the LED strip
+  Serial.println("Brightness adjusted with color preserved.");
 }
 
 // Check for alarm triggers based on current time and selected day
