@@ -498,37 +498,97 @@ String formatTime(int hour, int minute) {
   return h + ":" + m;
 }
 
-// Simulate sunrise effect with increasing brightness
-void startSunrise() {
-  Serial.println("Good Morning....");
-  dfPlayer.play(1); 
-  for (int i = 0; i < 5; i++) {
-    int brightness = map(i, 0, 100, 0, currentBrightness);
-    setBrightness(brightness);
-    delay(sunriseDuration * 600);  // Convert minutes to milliseconds   
-    show_time(); 
+// Function to interpolate between two colors
+int interpolateColor(int color1, int color2, float fraction) {
+  return color1 + (color2 - color1) * fraction;
+}
+
+// Function to gradually transition between two RGB colors
+void applyGradient(int startColor[3], int endColor[3], int steps, int delayTime) {
+  for (int step = 0; step <= steps; step++) {
+    float fraction = (float)step / (float)steps;
+
+    int red = interpolateColor(startColor[0], endColor[0], fraction);
+    int green = interpolateColor(startColor[1], endColor[1], fraction);
+    int blue = interpolateColor(startColor[2], endColor[2], fraction);
+
+    // Set color to all LEDs on the strip
+    for (int i = 0; i < strip.numPixels(); i++) {
+      strip.setPixelColor(i, strip.Color(red, green, blue));
+    }
+    strip.show();
+    delay(delayTime);
+    show_time();
+    Serial.println(step);
+    
   }
-  Serial.println("Sunrise simulation completed");
-  
+  Serial.print("Loop ended in gradient");
+}
+
+// Sunrise simulation function
+void startSunrise() {
+  Serial.println("Starting Sunrise...");
+  dfPlayer.play(1);
+
+  // Define color stages for sunrise
+  int dark[3] = {0, 0, 0};          // Dark
+  int orange[3] = {208, 72, 33};    // Orange (Dawn)
+  int yellow[3] = {241, 244, 62};    // Yellow (Morning)
+  int white[3] = {255, 255, 255};   // White (Daylight)
+
+  int steps = 100;  // Number of steps for transition
+  int delayTime = (sunriseDuration * 60 * 1000) / (steps * 9); // Smooth transition time based on duration
+
+  // Transition from dark to orange
+  applyGradient(dark, orange, steps, delayTime);
+
+  // Transition from orange to yellow
+  applyGradient(orange, yellow, steps, delayTime);
+
+  // Transition from yellow to white
+  applyGradient(yellow, white, steps, delayTime);
+
+  Serial.print("Sunrise loop ended");
+
   strip.clear();
   strip.show();
   dfPlayer.stop();
-  
+
+  Serial.println("Sunrise completed.");
 
 }
 
-// Simulate sunset effect with decreasing brightness
+// Sunset simulation function
 void startSunset() {
-  dfPlayer.play(2); 
-  for (int i = 10; i > 0; i--) {
-    int brightness = map(i, 0, 100, 0, currentBrightness);
-    setBrightness(brightness);
-    delay(sunsetDuration * 600);  // Convert minutes to milliseconds
-    show_time();
-  }
-  Serial.println("Sunset simulation completed");
-  strip.clear();
-  strip.show();
-  dfPlayer.stop();
+  Serial.println("Starting Sunset...");
+
+  // Define color stages for sunset (reverse of sunrise)
+  int white[3] = {255, 255, 255};   // White (Daylight)
+  int yellow[3] = {255, 255, 0};    // Yellow (Evening)
+  int orange[3] = {255, 165, 0};    // Orange (Dusk)
+  int dark[3] = {0, 0, 0};          // Dark (Night)
+
+  int steps = 100;  // Number of steps for transition
+  int delayTime = (sunsetDuration * 60 * 1000) / (steps * 3); // Smooth transition time based on duration
+
+  // Transition from white to yellow
+  applyGradient(white, yellow, steps, delayTime);
+
+  // Transition from yellow to orange
+  applyGradient(yellow, orange, steps, delayTime);
+
+  // Transition from orange to dark
+  applyGradient(orange, dark, steps, delayTime);
+
+  Serial.println("Sunset completed.");
   
+}
+
+
+void setBrightness_inc(int brightness) {
+  for (int i = 0; i < strip.numPixels(); i++) {
+    strip.setPixelColor(i, strip.Color(brightness, brightness, brightness));  // Set all pixels to white
+  }
+  strip.show();
+  Serial.println("Brightness set to: " + String(brightness));
 }
