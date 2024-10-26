@@ -9,6 +9,14 @@
 #include <DFPlayerMini_Fast.h>
 #include <TM1637Display.h>  // TM1637 display library
 
+// Audio Switch
+
+const int Audio_SW = 26;
+
+// Alarm stop 
+
+int Alarm_btn_flag = 0;
+
 
 // Pin definitions for TM1637
 #define CLK_PIN 18     // Clock pin (DIO)
@@ -16,8 +24,8 @@
 TM1637Display display(CLK_PIN, DIO_PIN);
 
 // Pin definitions for Physical Buttons
-#define ALARM_OFF_PIN 25  // GPIO for alarm off button
-#define VOLUME_UP_PIN 26  // GPIO for volume up button
+#define ALARM_OFF_PIN 23  // GPIO for alarm off button
+#define VOLUME_UP_PIN 28 // GPIO for volume up button
 #define VOLUME_DOWN_PIN 27  // GPIO for volume down button
 
 // Pin definitions for NeoPixel and Bluetooth
@@ -65,8 +73,17 @@ bool alarmDays[7] = {false, false, false, false, false, false, false}; // Sun, M
 bool bluetoothEnabled = false;  // Control the external Bluetooth module
 bool bluetoothPreviousState = false;  // To store the Bluetooth state before the alarm
 
+void IRAM_ATTR isr() 
+{
+	Alarm_btn_flag=1;
+}
+
 void setup() {
   Serial.begin(115200);
+  attachInterrupt(ALARM_OFF_PIN, isr, RISING);
+
+  pinMode (Audio_SW, OUTPUT);
+  digitalWrite (Audio_SW, LOW);
 
   // Initialize preferences
   preferences.begin("my-app", false);
@@ -140,6 +157,13 @@ void setup() {
 void loop() {
   server.handleClient();
   timeClient.update();
+
+  if(Alarm_btn_flag==1)
+  {
+    strip.clear();
+    strip.show();
+    Alarm_btn_flag =0;
+  }
   
   
   // Check current time from RTC
@@ -505,7 +529,13 @@ int interpolateColor(int color1, int color2, float fraction) {
 
 // Function to gradually transition between two RGB colors
 void applyGradient(int startColor[3], int endColor[3], int steps, int delayTime) {
+  if (Alarm_btn_flag == 0)
+  {
   for (int step = 0; step <= steps; step++) {
+    if(Alarm_btn_flag ==1)
+    {
+      break;
+    }
     float fraction = (float)step / (float)steps;
 
     int red = interpolateColor(startColor[0], endColor[0], fraction);
@@ -523,18 +553,26 @@ void applyGradient(int startColor[3], int endColor[3], int steps, int delayTime)
     
   }
   Serial.print("Loop ended in gradient");
+  }
 }
 
 // Sunrise simulation function
 void startSunrise() {
   Serial.println("Starting Sunrise...");
+  digitalWrite (Audio_SW, HIGH);
+  delay(1000);
   dfPlayer.play(1);
 
   // Define color stages for sunrise
-  int dark[3] = {0, 0, 0};          // Dark
+  /*int dark[3] = {0, 0, 0};          // Dark
   int orange[3] = {208, 72, 33};    // Orange (Dawn)
   int yellow[3] = {241, 244, 62};    // Yellow (Morning)
-  int white[3] = {255, 255, 255};   // White (Daylight)
+  int white[3] = {255, 255, 255};   // White (Daylight)*/
+
+   int white[3] = {255, 255, 255};   // White (Daylight)
+  int yellow[3] = {255, 255, 0};    // Yellow (Evening)
+  int orange[3] = {255, 165, 0};    // Orange (Dusk)
+  int dark[3] = {0, 0, 0};
 
   int steps = 100;  // Number of steps for transition
   int delayTime = (sunriseDuration * 60 * 1000) / (steps * 9); // Smooth transition time based on duration
@@ -553,14 +591,19 @@ void startSunrise() {
   strip.clear();
   strip.show();
   dfPlayer.stop();
+  Alarm_btn_flag = 0;
 
   Serial.println("Sunrise completed.");
+  digitalWrite (Audio_SW, LOW);
 
 }
 
 // Sunset simulation function
 void startSunset() {
   Serial.println("Starting Sunset...");
+  digitalWrite (Audio_SW, HIGH);
+  delay(1000);
+  dfPlayer.play(2);
 
   // Define color stages for sunset (reverse of sunrise)
   int white[3] = {255, 255, 255};   // White (Daylight)
@@ -580,7 +623,13 @@ void startSunset() {
   // Transition from orange to dark
   applyGradient(orange, dark, steps, delayTime);
 
+  strip.clear();
+  strip.show();
+  dfPlayer.stop();
+
   Serial.println("Sunset completed.");
+  digitalWrite (Audio_SW, LOW);
+  Alarm_btn_flag = 0;
   
 }
 
