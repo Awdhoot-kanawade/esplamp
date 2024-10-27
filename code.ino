@@ -8,6 +8,16 @@
 #include <WiFiUdp.h>
 #include <DFPlayerMini_Fast.h>
 #include <TM1637Display.h>  // TM1637 display library
+#include "WiFiProv.h"
+
+//Ble provisioning 
+String password = "";
+String ssid = "";
+
+const char * pop = "abcd1234"; // Proof of possession - otherwise called a PIN - string provided by the device, entered by the user in the phone app
+const char * service_name = "PROV_123"; // Name of your device (the Espressif apps expects by default device name starting with "Prov_")
+const char * service_key = NULL; // Password used for SofAP method (NULL = no password needed)
+bool reset_provisioned = true; // When true the library will automatically delete previously provisioned data.
 
 // Audio Switch
 
@@ -25,8 +35,7 @@ TM1637Display display(CLK_PIN, DIO_PIN);
 
 // Pin definitions for Physical Buttons
 #define ALARM_OFF_PIN 23  // GPIO for alarm off button
-#define VOLUME_UP_PIN 28 // GPIO for volume up button
-#define VOLUME_DOWN_PIN 27  // GPIO for volume down button
+
 
 // Pin definitions for NeoPixel and Bluetooth
 #define LED_PIN 5
@@ -49,6 +58,7 @@ WebServer server;
 
 // Preferences for persistent storage
 Preferences preferences;
+
 
 // DFPlayer for alarm sound playback
 #define FPSerial Serial1
@@ -78,6 +88,50 @@ void IRAM_ATTR isr()
 	Alarm_btn_flag=1;
 }
 
+void SysProvEvent(arduino_event_t *sys_event) {
+  switch (sys_event->event_id) {
+    case ARDUINO_EVENT_WIFI_STA_GOT_IP:
+      Serial.print("\nConnected IP address : ");
+      Serial.println(IPAddress(sys_event->event_info.got_ip.ip_info.ip.addr));
+      break;
+    case ARDUINO_EVENT_WIFI_STA_DISCONNECTED: Serial.println("\nDisconnected. Connecting to the AP again... "); break;
+    case ARDUINO_EVENT_PROV_START:            Serial.println("\nProvisioning started\nGive Credentials of your access point using smartphone app"); break;
+    case ARDUINO_EVENT_PROV_CRED_RECV:
+    {
+      Serial.println("\nReceived Wi-Fi credentials");
+      Serial.print("\tSSID : ");
+      ///Serial.println((const char *)sys_event->event_info.prov_cred_recv.ssid);
+      Serial.print("\tPassword : ");
+      //Serial.println((char const *)sys_event->event_info.prov_cred_recv.password);
+      password = ((char const *)sys_event->event_info.prov_cred_recv.password);
+      ssid = ((const char *)sys_event->event_info.prov_cred_recv.ssid);
+
+      Serial.print("\tSSID : ");
+      Serial.print(ssid);
+      Serial.print("\tPassword : ");
+      Serial.print(password);
+      preferences.putString("wifi_ssid", ssid);
+      preferences.putString("wifi_password", password);
+
+
+      break;
+    }
+    case ARDUINO_EVENT_PROV_CRED_FAIL:
+    {
+      Serial.println("\nProvisioning failed!\nPlease reset to factory and retry provisioning\n");
+      if (sys_event->event_info.prov_fail_reason == NETWORK_PROV_WIFI_STA_AUTH_ERROR) {
+        Serial.println("\nWi-Fi AP password incorrect");
+      } else {
+        Serial.println("\nWi-Fi AP not found....Add API \" nvs_flash_erase() \" before beginProvision()");
+      }
+      break;
+    }
+    case ARDUINO_EVENT_PROV_CRED_SUCCESS: Serial.println("\nProvisioning Successful"); break;
+    case ARDUINO_EVENT_PROV_END:          Serial.println("\nProvisioning Ends"); break;
+    default:                              break;
+  }
+}
+
 void setup() {
   Serial.begin(115200);
   attachInterrupt(ALARM_OFF_PIN, isr, RISING);
@@ -87,6 +141,9 @@ void setup() {
 
   // Initialize preferences
   preferences.begin("my-app", false);
+
+  ssid = preferences.getString("wifi_ssid", "ssid");
+  password = preferences.getString("wifi_password", "pass@123456");
   
   // Load saved preferences
   currentVolume = preferences.getInt("volume", 10);
@@ -131,16 +188,33 @@ void setup() {
 
   // Initialize physical buttons
   pinMode(ALARM_OFF_PIN, INPUT_PULLUP);
-  pinMode(VOLUME_UP_PIN, INPUT_PULLUP);
-  pinMode(VOLUME_DOWN_PIN, INPUT_PULLUP);
+
 
   // Initialize TM1637 display for showing the current time
   display.setBrightness(0x0f);  // Maximum brightness
 
   // Connect to Wi-Fi in AP+STA mode
   WiFi.mode(WIFI_AP_STA);
-  WiFi.softAP("ESP32AlarmClock");
-  WiFi.begin("AirFiber-8bLTLv5.0", "Pass@123");
+  WiFi.softAP("Vaishu's AlarmClock","7507212399");
+  WiFi.begin(ssid.c_str(),password.c_str());
+  
+  unsigned long startAttemptTime = millis();
+        while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 10000) {
+            delay(500);
+            Serial.print(".");
+        }
+
+        if (WiFi.status() == WL_CONNECTED) {
+            Serial.println("\nConnected to Wi-Fi!");
+        } else 
+        {
+            WiFi.onEvent(SysProvEvent);
+            Serial.println("Begin Provisioning using BLE");
+            uint8_t uuid[16] = {0xb4, 0xdf, 0x5a, 0x1c, 0x3f, 0x6b, 0xf4, 0xbf, 0xea, 0x4a, 0x82, 0x03, 0x04, 0x90, 0x1a, 0x02};
+            WiFiProv.beginProvision(NETWORK_PROV_SCHEME_BLE, NETWORK_PROV_SCHEME_HANDLER_FREE_BLE, NETWORK_PROV_SECURITY_1, pop, service_name, service_key, uuid, reset_provisioned);
+            log_d("ble qr");
+            WiFiProv.printQR(service_name, pop, "ble");
+        }
 
   // Initialize NTP client
   timeClient.begin();
@@ -179,12 +253,7 @@ void loop() {
   if (digitalRead(ALARM_OFF_PIN) == LOW) {
     stopAlarm();  // Turn off alarm if button is pressed
   }
-  if (digitalRead(VOLUME_UP_PIN) == LOW) {
-    increaseVolume();  // Increase volume if button is pressed
-  }
-  if (digitalRead(VOLUME_DOWN_PIN) == LOW) {
-    decreaseVolume();  // Decrease volume if button is pressed
-  }
+  
 
   // Get current day of the week (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
   int currentDay = now.dayOfTheWeek();
@@ -307,7 +376,7 @@ void handleRoot() {
   </style>
 </head>
 <body>
-  <h1>ESP32 Alarm Clock</h1>
+  <h1>Vaishu's Alarm Clock</h1>
   <div class="container">
     <label for="wakeUpTime">Wake-Up Time:</label><br>
     <input type="time" id="wakeUpTime" value=")" + wakeUpTime + R"(" onchange="updateValue('wakeUpTime')"><br>
@@ -328,11 +397,10 @@ void handleRoot() {
     <label for="alarmDay5">Friday</label><input type="checkbox" id="alarmDay5" onchange="updateValue('alarmDay5')" )" + String(alarmDays[5] ? " checked" : "") + R"("><br>
     <label for="alarmDay6">Saturday</label><input type="checkbox" id="alarmDay6" onchange="updateValue('alarmDay6')" )" + String(alarmDays[6] ? " checked" : "") + R"("><br>
 
-    <label for="volume">Volume:</label><br>
-    <input type="range" id="volume" min="0" max="100" value=")" + String(currentVolume) + R"(" onchange="updateValue('volume')"><span id="volumeValue">)" + String(currentVolume) + R"(</span><br>
 
-    <label for="brightness">Brightness:</label><br>
-    <input type="range" id="brightness" min="0" max="255" value=")" + String(currentBrightness) + R"(" onchange="updateValue('brightness')"><span id="brightnessValue">)" + String(currentBrightness) + R"(</span><br>
+    "<label for=\"brightness\">Brightness:</label><br>"
+              "<input type=\"range\" id=\"brightness\" min=\"0\" max=\"255\" value=\"" + String(currentBrightness) + "\" onchange=\"updateValue('brightness'); updateBrightnessDisplay();\" oninput=\"updateBrightnessDisplay()\">"
+              "<span id=\"brightnessValue\">" + String(currentBrightness) + "</span><br>"
 
     <label for="ledColor">LED Color:</label><br>
     <input type="color" id="ledColor" value="#ffffff" onchange="updateValue('ledColor')"><br>
