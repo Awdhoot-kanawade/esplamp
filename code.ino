@@ -279,21 +279,6 @@ void show_time()
 
   display.showNumberDecEx(hour * 100 + now.minute(), 0b01000000, true);// Display in HH:MM format with colon
 }
-// Increase volume function (physical button)
-void increaseVolume() {
-  currentVolume = min(currentVolume + 1, 30);  // DFPlayer supports volume levels from 0 to 30
-  dfPlayer.volume(currentVolume);
-  preferences.putInt("volume", currentVolume);
-  Serial.println("Volume increased: " + String(currentVolume));
-}
-
-// Decrease volume function (physical button)
-void decreaseVolume() {
-  currentVolume = max(currentVolume - 1, 0);  // DFPlayer supports volume levels from 0 to 30
-  dfPlayer.volume(currentVolume);
-  preferences.putInt("volume", currentVolume);
-  Serial.println("Volume decreased: " + String(currentVolume));
-}
 
 // Handle root HTML page
 void handleRoot() {
@@ -398,9 +383,8 @@ void handleRoot() {
     <label for="alarmDay6">Saturday</label><input type="checkbox" id="alarmDay6" onchange="updateValue('alarmDay6')" )" + String(alarmDays[6] ? " checked" : "") + R"("><br>
 
 
-    "<label for=\"brightness\">Brightness:</label><br>"
-              "<input type=\"range\" id=\"brightness\" min=\"0\" max=\"255\" value=\"" + String(currentBrightness) + "\" onchange=\"updateValue('brightness'); updateBrightnessDisplay();\" oninput=\"updateBrightnessDisplay()\">"
-              "<span id=\"brightnessValue\">" + String(currentBrightness) + "</span><br>"
+    <label for="brightness">Brightness:</label><br>
+    <input type="range" id="brightness" min="0" max="255" value=")" + String(currentBrightness) + R"(" onchange="updateValue('brightness')"><span id="brightnessValue">)" + String(currentBrightness) + R"(</span><br>
 
     <label for="ledColor">LED Color:</label><br>
     <input type="color" id="ledColor" value="#ffffff" onchange="updateValue('ledColor')"><br>
@@ -506,6 +490,7 @@ void handleUpdate() {
     bluetoothEnabled = (server.arg("bluetoothEnabled") == "true");
     digitalWrite(BLUETOOTH_PIN, bluetoothEnabled ? HIGH : LOW);  // Toggle Bluetooth module
     Serial.println("Bluetooth Module " + String(bluetoothEnabled ? "Enabled" : "Disabled"));
+    startSunrise();
   }
 
   server.send(200, "text/plain", "Updated");
