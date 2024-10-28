@@ -14,8 +14,8 @@
 String password = "";
 String ssid = "";
 
-const char * pop = "abcd1234"; // Proof of possession - otherwise called a PIN - string provided by the device, entered by the user in the phone app
-const char * service_name = "PROV_123"; // Name of your device (the Espressif apps expects by default device name starting with "Prov_")
+const char * pop = "7507212399"; // Proof of possession - otherwise called a PIN - string provided by the device, entered by the user in the phone app
+const char * service_name = "Vaishu's Speaker"; // Name of your device (the Espressif apps expects by default device name starting with "Prov_")
 const char * service_key = NULL; // Password used for SofAP method (NULL = no password needed)
 bool reset_provisioned = true; // When true the library will automatically delete previously provisioned data.
 
@@ -50,8 +50,7 @@ Adafruit_NeoPixel strip(NUM_PIXELS, LED_PIN, NEO_GRB + NEO_KHZ800);
 RTC_DS3231 rtc;
 
 // NTP setup
-WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP, "192.168.31.117", 19800, 60000); // GMT+5:30
+
 
 // Web server
 WebServer server;
@@ -71,10 +70,11 @@ bool wakeUpAlarmEnabled = true;
 bool bedTimeAlarmEnabled = true;
 int currentVolume = 10;
 int currentBrightness = 255;
-int sunriseDuration = 10; // in minutes
+int sunriseDuration = 20; // in minutes
 int sunsetDuration = 10;  // in minutes
 int ledColor = 0xFFFFFF;  // Default color (white)
 String ledEffect = "solid";  // Default LED effect (solid)
+int Audio_Number = 1;
 
 // Days of the week flags (true if alarm is active on that day)
 bool alarmDays[7] = {false, false, false, false, false, false, false}; // Sun, Mon, Tue, Wed, Thu, Fri, Sat
@@ -217,7 +217,7 @@ void setup() {
         }
 
   // Initialize NTP client
-  timeClient.begin();
+  
   
   // Start web server
   server.on("/", handleRoot);
@@ -230,7 +230,7 @@ void setup() {
 
 void loop() {
   server.handleClient();
-  timeClient.update();
+  
 
   if(Alarm_btn_flag==1)
   {
@@ -402,7 +402,7 @@ void handleRoot() {
       <span class="bar"><span class="toggle"></span></span>
     </label><br>
 
-    <button onclick="sendCommand('stopAlarm')">Stop Alarm</button><br>
+    <button onclick="sendCommand('stopAlarm')">Clear Light</button><br>
     <button onclick="sendCommand('syncTime')">Sync Time</button><br>
   </div>
 </body>
@@ -512,6 +512,10 @@ void handleCommand() {
     if (command == "stopAlarm") {
       stopAlarm();
     } else if (command == "syncTime") {
+      WiFiUDP ntpUDP;
+      NTPClient timeClient(ntpUDP, "time1.google.com", 19800, 60000); // GMT+5:30
+      timeClient.begin();
+      timeClient.update();
       rtc.adjust(DateTime(timeClient.getEpochTime()));  // Sync RTC with NTP time
       Serial.println("RTC time synced with NTP");
     }
@@ -602,7 +606,7 @@ void applyGradient(int startColor[3], int endColor[3], int steps, int delayTime)
     strip.show();
     delay(delayTime);
     show_time();
-    Serial.println(step);
+    //Serial.println(step);
     
   }
   Serial.print("Loop ended in gradient");
@@ -614,17 +618,13 @@ void startSunrise() {
   Serial.println("Starting Sunrise...");
   digitalWrite (Audio_SW, HIGH);
   delay(1000);
-  dfPlayer.play(1);
+  Audio_Number = random(1,4);
+  dfPlayer.play(Audio_Number);
 
-  // Define color stages for sunrise
-  /*int dark[3] = {0, 0, 0};          // Dark
-  int orange[3] = {208, 72, 33};    // Orange (Dawn)
-  int yellow[3] = {241, 244, 62};    // Yellow (Morning)
-  int white[3] = {255, 255, 255};   // White (Daylight)*/
 
    int white[3] = {255, 255, 255};   // White (Daylight)
-  int yellow[3] = {255, 255, 0};    // Yellow (Evening)
-  int orange[3] = {255, 165, 0};    // Orange (Dusk)
+  int yellow[3] = {255, 200, 0};    // Yellow (Evening)
+  int orange[3] = {255, 60, 0};    // Orange (Dusk)
   int dark[3] = {0, 0, 0};
 
   int steps = 100;  // Number of steps for transition
@@ -656,12 +656,14 @@ void startSunset() {
   Serial.println("Starting Sunset...");
   digitalWrite (Audio_SW, HIGH);
   delay(1000);
-  dfPlayer.play(2);
+  Audio_Number = random(4,8);
+  dfPlayer.play(Audio_Number);
+  
 
   // Define color stages for sunset (reverse of sunrise)
   int white[3] = {255, 255, 255};   // White (Daylight)
-  int yellow[3] = {255, 255, 0};    // Yellow (Evening)
-  int orange[3] = {255, 165, 0};    // Orange (Dusk)
+  int yellow[3] = {255, 200, 0};    // Yellow (Evening)
+  int orange[3] = {255, 60, 0};    // Orange (Dusk)
   int dark[3] = {0, 0, 0};          // Dark (Night)
 
   int steps = 100;  // Number of steps for transition
