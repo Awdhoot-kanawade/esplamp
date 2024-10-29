@@ -10,6 +10,8 @@
 #include <TM1637Display.h>  // TM1637 display library
 #include "WiFiProv.h"
 
+int wifi_mode = 1;  // 0 for STA 1 for STA+AP
+
 //Ble provisioning
 String password = "";
 String ssid = "";
@@ -54,7 +56,7 @@ RTC_DS3231 rtc;
 
 
 // Web server
-WebServer server;
+WebServer server(80);
 
 // Preferences for persistent storage
 Preferences preferences;
@@ -147,6 +149,19 @@ String formatTime(int hour, int minute);
 
 // Rest of your code including the setup function
 
+IPAddress local_IP(192, 168, 1, 184);  // Set your desired static IP address
+IPAddress gateway(192, 168, 1, 1);     // Set your network gateway
+IPAddress subnet(255, 255, 255, 0);    // Set your subnet mask
+
+
+
+
+
+
+
+
+
+
 
 void setup() {
   Serial.begin(115200);
@@ -198,7 +213,7 @@ void setup() {
       ;
   }
   //dfPlayer.volume(currentVolume);  // Set initial volume for DFPlayer
-  volume=4;
+  volume = 4;
   dfPlayer.volume(volume);
 
   // Initialize GPIO for controlling Bluetooth module
@@ -212,10 +227,28 @@ void setup() {
   // Initialize TM1637 display for showing the current time
   display.setBrightness(0x0f);  // Maximum brightness
 
-  // Connect to Wi-Fi in AP+STA mode
-  WiFi.mode(WIFI_AP_STA);
-  WiFi.softAP("Vaishu's AlarmClock", "7507212399");
-  WiFi.begin(ssid.c_str(), password.c_str());
+  if (wifi_mode == 1)
+
+  {
+
+
+    if (!WiFi.config(local_IP, gateway, subnet)) {
+      Serial.println("Static IP configuration failed.");
+    }
+
+    WiFi.begin(ssid, password);
+  }
+  // Connect to the network in STA mode with Static IP
+  if (wifi_mode == 0) {
+
+    // Connect to Wi-Fi in AP+STA mode
+
+    WiFi.mode(WIFI_AP_STA);
+    WiFi.softAP("Vaishu's AlarmClock", "7507212399");
+    WiFi.begin(ssid.c_str(), password.c_str());
+    // AP+STA end
+  }
+
 
   unsigned long startAttemptTime = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 10000) {
@@ -484,7 +517,7 @@ void handleUpdate() {
     }
   }
 
-  
+
   if (server.hasArg("brightness")) {
     currentBrightness = server.arg("brightness").toInt();
     setBrightness(currentBrightness);
@@ -609,16 +642,15 @@ void applyGradient(int startColor[3], int endColor[3], int steps, int delayTime)
       }
       float fraction = (float)step / (float)steps;
 
-      if(volume<20)
-      {  
+      if (volume < 20) {
         volume++;
         dfPlayer.volume(volume);
         delay(1000);
         Serial.print("volume: ");
         Serial.print(volume);
       }
-      
-  
+
+
 
       int red = interpolateColor(startColor[0], endColor[0], fraction);
       int green = interpolateColor(startColor[1], endColor[1], fraction);
@@ -633,7 +665,6 @@ void applyGradient(int startColor[3], int endColor[3], int steps, int delayTime)
       show_time();
       //Serial.println(step);
     }
-    
   }
 }
 
@@ -672,21 +703,20 @@ void startSunrise() {
 
   strip.clear();
   strip.show();
-  while (volume>1)
-      {  
-        volume--;
-        dfPlayer.volume(volume);
-        delay(1000);
-        Serial.print("volume: ");
-        Serial.print(volume);
-      }
+  while (volume > 1) {
+    volume--;
+    dfPlayer.volume(volume);
+    delay(1000);
+    Serial.print("volume: ");
+    Serial.print(volume);
+  }
 
   dfPlayer.stop();
   Alarm_btn_flag = 0;
 
   Serial.println("Sunrise completed.");
   digitalWrite(Audio_SW, LOW);
-  volume=5;
+  volume = 5;
 }
 
 // Sunset simulation function
@@ -720,20 +750,19 @@ void startSunset() {
 
   strip.clear();
   strip.show();
-  while (volume>1)
-      {  
-        volume--;
-        dfPlayer.volume(volume);
-        delay(1000);
-        Serial.print("volume: ");
-        Serial.print(volume);
-      }
+  while (volume > 1) {
+    volume--;
+    dfPlayer.volume(volume);
+    delay(1000);
+    Serial.print("volume: ");
+    Serial.print(volume);
+  }
   dfPlayer.stop();
 
   Serial.println("Sunset completed.");
   digitalWrite(Audio_SW, LOW);
   Alarm_btn_flag = 0;
-  volume=5;
+  volume = 5;
 }
 
 
