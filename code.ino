@@ -22,6 +22,7 @@ bool reset_provisioned = true;                  // When true the library will au
 // Audio Switch
 
 const int Audio_SW = 26;
+int volume;
 
 // Alarm stop
 
@@ -71,10 +72,10 @@ bool bedTimeAlarmEnabled = true;
 int currentVolume = 10;
 int currentBrightness = 255;
 int sunriseDuration = 20;    // in minutes
-int sunsetDuration = 10;     // in minutes
+int sunsetDuration = 20;     // in minutes
 int ledColor = 0xFFFFFF;     // Default color (white)
 String ledEffect = "solid";  // Default LED effect (solid)
-int Audio_Number = 1;
+int Audio_Number;
 
 // Days of the week flags (true if alarm is active on that day)
 bool alarmDays[7] = { false, false, false, false, false, false, false };  // Sun, Mon, Tue, Wed, Thu, Fri, Sat
@@ -197,7 +198,8 @@ void setup() {
       ;
   }
   //dfPlayer.volume(currentVolume);  // Set initial volume for DFPlayer
-  dfPlayer.volume(30);
+  volume=4;
+  dfPlayer.volume(volume);
 
   // Initialize GPIO for controlling Bluetooth module
   pinMode(BLUETOOTH_PIN, OUTPUT);
@@ -399,13 +401,13 @@ void handleRoot() {
 
     <h3>Days for Alarm:</h3>
     <div class="alarm-days">
-      <label for="alarmDay0">Sunday</label><input type="checkbox" id="alarmDay0" onchange="updateValue('alarmDay0')" )" + String(alarmDays[0] ? " checked" : "") + R"("><br>
       <label for="alarmDay1">Monday</label><input type="checkbox" id="alarmDay1" onchange="updateValue('alarmDay1')" )" + String(alarmDays[1] ? " checked" : "") + R"("><br>
       <label for="alarmDay2">Tuesday</label><input type="checkbox" id="alarmDay2" onchange="updateValue('alarmDay2')" )" + String(alarmDays[2] ? " checked" : "") + R"("><br>
       <label for="alarmDay3">Wednesday</label><input type="checkbox" id="alarmDay3" onchange="updateValue('alarmDay3')" )" + String(alarmDays[3] ? " checked" : "") + R"("><br>
       <label for="alarmDay4">Thursday</label><input type="checkbox" id="alarmDay4" onchange="updateValue('alarmDay4')" )" + String(alarmDays[4] ? " checked" : "") + R"("><br>
       <label for="alarmDay5">Friday</label><input type="checkbox" id="alarmDay5" onchange="updateValue('alarmDay5')" )" + String(alarmDays[5] ? " checked" : "") + R"("><br>
       <label for="alarmDay6">Saturday</label><input type="checkbox" id="alarmDay6" onchange="updateValue('alarmDay6')" )" + String(alarmDays[6] ? " checked" : "") + R"("><br>
+      <label for="alarmDay0">Sunday</label><input type="checkbox" id="alarmDay0" onchange="updateValue('alarmDay0')" )" + String(alarmDays[0] ? " checked" : "") + R"("><br>      
     </div>
 
     <div class="spacer"></div> <!-- Adds space between Saturday and Lamp Brightness -->
@@ -482,12 +484,7 @@ void handleUpdate() {
     }
   }
 
-  if (server.hasArg("volume")) {
-    currentVolume = server.arg("volume").toInt();
-    Serial.println("Volume set to: " + String(currentVolume));
-    preferences.putInt("volume", currentVolume);
-    dfPlayer.volume(currentVolume);  // Set DFPlayer volume
-  }
+  
   if (server.hasArg("brightness")) {
     currentBrightness = server.arg("brightness").toInt();
     setBrightness(currentBrightness);
@@ -604,11 +601,24 @@ int interpolateColor(int color1, int color2, float fraction) {
 // Function to gradually transition between two RGB colors
 void applyGradient(int startColor[3], int endColor[3], int steps, int delayTime) {
   if (Alarm_btn_flag == 0) {
+    //int counter=0;
+
     for (int step = 0; step <= steps; step++) {
       if (Alarm_btn_flag == 1) {
         break;
       }
       float fraction = (float)step / (float)steps;
+
+      if(volume<20)
+      {  
+        volume++;
+        dfPlayer.volume(volume);
+        delay(1000);
+        Serial.print("volume: ");
+        Serial.print(volume);
+      }
+      
+  
 
       int red = interpolateColor(startColor[0], endColor[0], fraction);
       int green = interpolateColor(startColor[1], endColor[1], fraction);
@@ -623,7 +633,7 @@ void applyGradient(int startColor[3], int endColor[3], int steps, int delayTime)
       show_time();
       //Serial.println(step);
     }
-    Serial.print("Loop ended in gradient");
+    
   }
 }
 
@@ -632,8 +642,12 @@ void startSunrise() {
   Serial.println("Starting Sunrise...");
   digitalWrite(Audio_SW, HIGH);
   delay(1000);
+  randomSeed(analogRead(34));
   Audio_Number = random(1, 4);
+  Serial.print("Audio_Number :");
+  Serial.print(Audio_Number);
   dfPlayer.play(Audio_Number);
+  delay(2000);
 
 
   int white[3] = { 255, 255, 255 };  // White (Daylight)
@@ -647,6 +661,7 @@ void startSunrise() {
   // Transition from dark to orange
   applyGradient(dark, orange, steps, delayTime);
 
+
   // Transition from orange to yellow
   applyGradient(orange, yellow, steps, delayTime);
 
@@ -657,11 +672,21 @@ void startSunrise() {
 
   strip.clear();
   strip.show();
+  while (volume>1)
+      {  
+        volume--;
+        dfPlayer.volume(volume);
+        delay(1000);
+        Serial.print("volume: ");
+        Serial.print(volume);
+      }
+
   dfPlayer.stop();
   Alarm_btn_flag = 0;
 
   Serial.println("Sunrise completed.");
   digitalWrite(Audio_SW, LOW);
+  volume=5;
 }
 
 // Sunset simulation function
@@ -669,10 +694,12 @@ void startSunset() {
   Serial.println("Starting Sunset...");
   digitalWrite(Audio_SW, HIGH);
   delay(1000);
-  Audio_Number = random(4, 8);
+  randomSeed(analogRead(34));
+  Audio_Number = random(4, 7);
+  Serial.print("Audio_Number :");
+  Serial.print(Audio_Number);
   dfPlayer.play(Audio_Number);
-
-
+  delay(2000);
   // Define color stages for sunset (reverse of sunrise)
   int white[3] = { 255, 255, 255 };  // White (Daylight)
   int yellow[3] = { 255, 200, 0 };   // Yellow (Evening)
@@ -693,11 +720,20 @@ void startSunset() {
 
   strip.clear();
   strip.show();
+  while (volume>1)
+      {  
+        volume--;
+        dfPlayer.volume(volume);
+        delay(1000);
+        Serial.print("volume: ");
+        Serial.print(volume);
+      }
   dfPlayer.stop();
 
   Serial.println("Sunset completed.");
   digitalWrite(Audio_SW, LOW);
   Alarm_btn_flag = 0;
+  volume=5;
 }
 
 
